@@ -99,9 +99,6 @@ class PedestrianDataset(Dataset):
             boxes_or.append([x1, y1, x2, y2])
             boxes.append([x1_r, y1_r, x2_r, y2_r])
         
-        # if not self.train:
-        #     boxes = boxes_or 
-        
         boxes = torch.as_tensor(boxes, dtype = torch.float32)    
 
         area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
@@ -124,14 +121,15 @@ class PedestrianDataset(Dataset):
                                          labels = labels)
                 image = sample['image']
                 target['boxes'] = torch.Tensor(sample['bboxes'])
-            #    import IPython; IPython.embed()
+            return image, target 
 
         else:
             if self.transforms is not None: 
                 sample = self.transforms(image=image_resized) # , bboxes=target['boxes'], labels=labels)
                 image = sample['image']
+            return image, target, width, height
                 
-        return image, target 
+        
 
 def create_train_dataset():
     train_dataset = PedestrianDataset(root, train=True, split="train", transforms=train_transform())
