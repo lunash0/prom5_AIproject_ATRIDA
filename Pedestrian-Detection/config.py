@@ -1,0 +1,7 @@
+BATCH_SIZE = 4
+SEED = 41
+IMG_SIZE = 512
+EPOCHS = 10
+NUM_CLASS = 2 
+LR = 3e-4
+MODEL_NAME = 'model'
