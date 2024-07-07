@@ -16,7 +16,7 @@ from tqdm import tqdm
 from google.colab import drive
 drive.mount('/content/drive')
 
-zip_file = ZipFile('/content/drive/My Drive/dataset/Bbox_4_new.zip')
+zip_file = ZipFile('/content/drive/My Drive/dataset/Bbox_4_new.zip') # (압축이 해제되지 않은) 학습할 데이터셋 zip file 위치경로
 zip_file.extractall('/content/drive/My Drive/dataset/') # 압축을 해제할 '/위치경로/'
 
 import xml.etree.ElementTree as ET
