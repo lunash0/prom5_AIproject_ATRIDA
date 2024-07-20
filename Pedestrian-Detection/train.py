@@ -1,4 +1,5 @@
 from config import BATCH_SIZE, SEED, IMG_SIZE, EPOCHS, NUM_CLASS, LR, MODEL_NAME
+from config import RUN, get_log
 from model import build_model
 from custom_utils import *
 from tqdm.auto import tqdm 
@@ -10,6 +11,7 @@ import torch
 import matplotlib.pyplot as plt
 import time
 from torchvision.ops import box_iou 
+import wandb 
 
 device = torch.device('cuda:4' if torch.cuda.is_available() else 'cpu')
 
@@ -110,6 +112,9 @@ def valid(device, model, valid_loader, iou_thresh=0.3, confidence_threshold=0.5)
 
 
 def main():
+      # TODO(Yoojin): Call wandb for log
+      get_log() 
+
       base_root = '/home/yoojinoh/Others/PR/ATRIDA_prom5_AIproject/Pedestrian-Detection'
       best_train_loss = 99999
       best_valid_score = -1 
@@ -123,9 +128,10 @@ def main():
       print(f'# of validation samples : {len(valid_dataset)}')   
 
       model = build_model(NUM_CLASS).to(device)    
-
+      wandb.watch(model) # Track model information
+      
       params = [p for p in model.parameters() if p.requires_grad]
-      optimizer = torch.optim.SGD(params, lr=0.005,momentum=0.9, weight_decay=0.0005)
+      optimizer = torch.optim.SGD(params, lr=LR,momentum=0.9, weight_decay=0.0005)
 
       lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=3,gamma=0.1)
 
@@ -148,18 +154,28 @@ def main():
             end = time.time()
             print(f"Took {((end - start) / 60):.3f} minutes for epoch {epoch}")
 
+            # Log metrics to wandb
+            wandb.log({
+                "train_loss": train_tot_loss,
+                "valid_iou": final_avg_iou,
+                "epoch": epoch + 1
+            })
+
             if best_valid_score < final_avg_iou and final_avg_iou > 0.6:
                   best_valid_score = final_avg_iou 
                   best_model = model 
 
                   print(f"\nBest validation score(IoU): {final_avg_iou}")
                   print(f"\nSaving best model for epoch: {epoch+1}\n")
+                  checkpoint_path = f'{base_root}/outputs/best_{MODEL_NAME}_e{epoch}s{final_avg_iou}l{train_tot_loss}.pth'
                   torch.save({
                     'epoch': epoch+1,
                     'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),}, f'{base_root}/outputs/best_{MODEL_NAME}_e{epoch}s{final_avg_iou}l{train_tot_loss}.pth')
-            
+                    'optimizer_state_dict': optimizer.state_dict(),}, checkpoint_path)
+                  wandb.save(checkpoint_path)
+
             time.sleep(2)
+      wandb.finish()
 
 if __name__ == "__main__":
     main()
