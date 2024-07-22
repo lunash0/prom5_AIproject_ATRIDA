@@ -9,22 +9,25 @@ import matplotlib.pyplot as plt
 import re 
 import os 
 from torchvision.ops import box_iou, nms 
+from torchvision.transforms import v2 as T
 
 def collate_fn(batch):
     return tuple(zip(*batch))
 
-def train_transform():
-    return A.Compose([
-        A.HorizontalFlip(p=0.5),
-        A.RandomRotate90(p=0.5),
-        # A.MotionBlur(p=0.2),
-        # A.MedianBlur(blur_limit=3, p=0.1),
-        # A.Blur(blur_limit=3, p=0.1),
-        ToTensorV2(), # p=1.0
-    ], bbox_params={
-        'format': 'pascal_voc',
-        'label_fields': ['labels']
-    })
+# def train_transform():
+#     return A.Compose([
+#         A.HorizontalFlip(p=0.5),
+#         A.RandomRotate90(p=0.5),
+#         ToTensorV2(p=1.0)
+#     ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['labels']))
+
+def train_transform(train=True):
+    transforms = []
+    if train:
+        transforms.append(T.RandomHorizontalFlip(0.5))
+    transforms.append(T.ToDtype(torch.float, scale=True))
+    transforms.append(T.ToPureTensor())
+    return T.Compose(transforms)
 
 def valid_transform():
     return A.Compose([
@@ -70,46 +73,73 @@ def filter_boxes_by_score(output, threshold):
     return filtered_output
 
 
-def get_image_path(image_id:int, root:str = "/home/yoojinoh/Others/PR/PedDetect-Data/data/Val/Val/JPEGImages")->str:
-    return os.path.join(root, f'image ({image_id}).jpg')
+def get_image_path(image_id:int, root:str)->str:
+    return os.path.join(root, f'MP_SEL_{str(image_id).zfill(6)}.jpg')  # f'image ({image_id}).jpg'
 
+# def draw_boxes_on_image_val(image_path:str, boxes, labels, annot_path:str, save_path = None):
+#     image = cv2.imread(image_path) 
+#     # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-def draw_boxes_on_image(image_path:str, boxes, labels, annot_path:str, save_path = None):
-    image = cv2.imread(image_path) 
-    # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+#     #TODO (Yoojin) : Generalize codes for other format of datasets
+#     # image_id : image (1) 
+#     # match = re.search(r'image \(\d+\)', image_path)
+#     # if match:
+#     #     image_id = match.group()
+#     # # print(image_id)
+#     with open(annot_path, 'r') as f:
+#         annotations: list[dict] = json.load(f)["annotations"]
 
-    #TODO (Yoojin) : Generalize codes for other format of datasets
-    # image_id : image (1) 
-    match = re.search(r'image \(\d+\)', image_path)
-    if match:
-        image_id = match.group()
-    # print(image_id)
-    with open(annot_path, 'r') as f:
-        annotations: list[dict] = json.load(f)["annotations"]
+#     # for ann in annotations:
+#     #     if ann['image_id'] == image_id:
+#     #         xmin, ymin = ann['bbox'][0], ann['bbox'][1]
+#     #         xmax, ymax = (xmin + ann['bbox'][2]), (ymin + ann['bbox'][3])
+#     #         class_id = ann['category_id']
+#     #         class_name = 'person' if 1 else ''
+#     #         cv2.rectangle(image, (xmin, ymin), (xmax, ymax), (255, 0, 0), 2)
+#     #         cv2.putText(image, class_name, (xmin, ymin- 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+#     # boxes = boxes.cpu().numpy()
+#     # labels = labels.cpu().numpy()
 
-    # for ann in annotations:
-    #     if ann['image_id'] == image_id:
-    #         xmin, ymin = ann['bbox'][0], ann['bbox'][1]
-    #         xmax, ymax = (xmin + ann['bbox'][2]), (ymin + ann['bbox'][3])
-    #         class_id = ann['category_id']
-    #         class_name = 'person' if 1 else ''
-    #         cv2.rectangle(image, (xmin, ymin), (xmax, ymax), (255, 0, 0), 2)
-    #         cv2.putText(image, class_name, (xmin, ymin- 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
-    # boxes = boxes.cpu().numpy()
-    # labels = labels.cpu().numpy()
-
-    for idx, box in enumerate(boxes):
-        label = labels[idx]
-        x1, y1, x2, y2 = map(int, box) # box.astype(int)
-        if label == 1:
-            class_name = 'person'
-        else:
-            class_name = ''
-        cv2.rectangle(image, (x1, y1), (x2, y2), (255, 0, 0), 2)
-        cv2.putText(image, class_name, (x1, y1- 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+#     for idx, box in enumerate(boxes):
+#         label = labels[idx]
+#         x1, y1, x2, y2 = map(int, box) # box.astype(int)
+#         if label == 1:
+#             class_name = 'person'
+#         else:
+#             class_name = ''
+#         cv2.rectangle(image, (x1, y1), (x2, y2), (255, 0, 0), 2)
+#         cv2.putText(image, class_name, (x1, y1- 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
         
-    if save_path is not None:
-        cv2.imwrite(save_path, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+#     if save_path is not None:
+#         save_fname = os.path.join(save_path, 'save.jpg')
+#         cv2.imwrite(save_path, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+#         print('saved image')
 
-    return image
+#     return image
 
+
+
+
+def draw_boxes_on_image_val(image_path, pred_boxes, gt_boxes, pred_labels, gt_labels, save_path):
+    image = cv2.imread(image_path)
+    
+    for box, label in zip(pred_boxes, pred_labels):
+        x1, y1, x2, y2 = [int(coord) for coord in box]
+        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(image, f'Pred: {label}', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+    
+    for box, label in zip(gt_boxes, gt_labels):
+        x1, y1, x2, y2 = [int(coord) for coord in box]
+        cv2.rectangle(image, (x1, y1), (x2, y2), (255, 0, 0), 2)
+        cv2.putText(image, f'GT: {label}', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
+    
+    cv2.imwrite(save_path, image)
+    print(f'Saved image with bounding boxes to {save_path}')
+
+def draw_boxes_on_image(image, boxes, labels, save_path):
+    for box, label in zip(boxes, labels):
+        x1, y1, x2, y2 = [int(coord) for coord in box]
+        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(image, str(label), (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+
+    cv2.imwrite(save_path, image)
