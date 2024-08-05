@@ -1,5 +1,5 @@
-from config import BATCH_SIZE, SEED, IMG_SIZE, EPOCHS, NUM_CLASS, LR, MODEL_NAME
-from config import RUN, get_log
+from config import EPOCHS, NUM_CLASS, LR, MODEL_NAME
+from config import get_log
 from model import build_model
 from custom_utils import *
 from tqdm.auto import tqdm 
@@ -8,14 +8,13 @@ from datasets import (
     create_train_loader, create_valid_loader
 )
 import torch
-import matplotlib.pyplot as plt
 import time
 from torchvision.ops import box_iou 
-import wandb 
+# import wandb 
+from torch import nn as nn 
 
-device = torch.device('cuda:4' if torch.cuda.is_available() else 'cpu')
-import cv2
-import numpy as np
+device = torch.device('cuda:5' if torch.cuda.is_available() else 'cpu')
+
 
 def train(device, model, train_loader, optimizer, scheduler):
     train_losses = []
@@ -25,7 +24,10 @@ def train(device, model, train_loader, optimizer, scheduler):
     for i, data in enumerate(progress_bar):
         images, targets, image_filename = data
 
-        images = [img.to(device) for img in images]
+        images = [img.to(device) for img in images] # images[0].shape = 3x360x640 (cxhxw)
+        
+        check = images[0]
+        
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
         optimizer.zero_grad()
@@ -34,7 +36,7 @@ def train(device, model, train_loader, optimizer, scheduler):
         losses = sum(loss for loss in loss_dict.values())
         losses.backward()
 
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=2.0)  # Gradient clipping
+        nn.utils.clip_grad_norm_(model.parameters(), max_norm=2.0)  # Gradient clipping
 
         optimizer.step()
 
@@ -42,39 +44,16 @@ def train(device, model, train_loader, optimizer, scheduler):
         running_loss += loss_value
         train_losses.append(loss_value)
 
-        """ 
-        # sanity check
-        if i % 10 == 0:  
-            for j, image in enumerate(images):
-                image_np = image.permute(1, 2, 0).cpu().numpy()
-                image_np = (image_np * 255).astype(np.uint8)
-
-                boxes = targets[j]['boxes'].cpu().numpy()
-                labels = targets[j]['labels'].cpu().numpy()
-
-                orig_image = cv2.imread(f'/home/yoojinoh/Others/PR/PedDetect-Data/aihub/Bbox_0250/{image_filename[0]}') #cv2.imread(train_loader.dataset.local_images[i * len(images) + j])
-                h, w, _ = orig_image.shape
-                orig_boxes = []
-                for box in boxes:
-                    x1 = int(box[0] / IMG_SIZE * w)
-                    y1 = int(box[1] / IMG_SIZE * h)
-                    x2 = int(box[2] / IMG_SIZE * w)
-                    y2 = int(box[3] / IMG_SIZE * h)
-                    orig_boxes.append([x1, y1, x2, y2])
-
-                save_path = f'/home/yoojinoh/Others/PR/prom5_AIproject_ATRIDA/Pedestrian-Detection/outputs/train_image_{i}_{j}.jpg'
-                draw_boxes_on_image(orig_image, orig_boxes, labels, save_path)
-                print(f'Saved image with bounding boxes to {save_path}')
-        """
-        
+        # Log the loss to wandb
+        # wandb.log({"training_loss": loss_value})
+                
         progress_bar.set_description(desc=f"Training Loss: {loss_value:.4f}")
 
     tot_loss = running_loss / len(train_loader)
     
     return train_losses, tot_loss
 
-
-def valid(device, model, valid_loader, iou_thresh=0.3, confidence_threshold=0.5):
+def valid(device, model, valid_loader, iou_thresh=0.4, confidence_threshold=0.4):
     progress_bar = tqdm(valid_loader, total=len(valid_loader))
 
     iou_scores = []
@@ -90,30 +69,6 @@ def valid(device, model, valid_loader, iou_thresh=0.3, confidence_threshold=0.5)
         with torch.no_grad():
             outputs = model(images)
 
-        # sanity check
-        """ 
-        if i % 10 == 0:  
-            for j, image in enumerate(images):
-                image_np = image.permute(1, 2, 0).cpu().numpy()
-                image_np = (image_np * 255).astype(np.uint8)
-
-                boxes = targets[j]['boxes'].cpu().numpy()
-                labels = targets[j]['labels'].cpu().numpy()
-
-                orig_image = cv2.imread(f'/home/yoojinoh/Others/PR/PedDetect-Data/aihub/Bbox_0250/{image_filename[0]}') #cv2.imread(train_loader.dataset.local_images[i * len(images) + j])
-                h, w, _ = orig_image.shape
-                orig_boxes = []
-                for box in boxes:
-                    x1 = int(box[0] / IMG_SIZE * w)
-                    y1 = int(box[1] / IMG_SIZE * h)
-                    x2 = int(box[2] / IMG_SIZE * w)
-                    y2 = int(box[3] / IMG_SIZE * h)
-                    orig_boxes.append([x1, y1, x2, y2])
-
-                save_path = f'/home/yoojinoh/Others/PR/prom5_AIproject_ATRIDA/Pedestrian-Detection/outputs/val_image_{i}_{j}.jpg'
-                draw_boxes_on_image(orig_image, orig_boxes, labels, save_path)
-                print(f'Saved image with bounding boxes to {save_path}')
-         """
         # Apply NMS and Confidence Score Threshold
         outputs = [apply_nms(output, iou_thresh) for output in outputs]
         outputs = [filter_boxes_by_score(output, confidence_threshold) for output in outputs]
@@ -147,20 +102,24 @@ def valid(device, model, valid_loader, iou_thresh=0.3, confidence_threshold=0.5)
                     mean_iou = 0.0
 
                 iou_scores.append(mean_iou)
+                # wandb.log({"Validation mean IoU ": mean_iou})
 
-                
-                if mean_iou > 0.5:
-                    image_path = get_image_path(image_ids[idx])
-                    img = draw_boxes_on_image_val(image_path, pred_boxes_norm, labels, 
-                                              annot_path='/home/yoojinoh/Others/PR/PedDetect-Data/aihub/val_annotations.json',  # change dir
-                                              save_path=f'/home/yoojinoh/Others/PR/ATRIDA_prom5_AIproject/Pedestrian-Detection/outputs/valid_{image_filename}') # change dir
-                image_path = get_image_path(image_id = image_ids[idx], root = '/home/yoojinoh/Others/PR/PedDetect-Data/aihub/Bbox_0250') # change dir
-                img = draw_boxes_on_image_val(image_path = f"/home/yoojinoh/Others/PR/PedDetect-Data/aihub/Bbox_0250/{image_filename[idx]}", 
+                def find_root(root, find):
+                  import os
+                  for dir_path, _, filenames in (os.walk(root)):
+                    for filename in filenames:
+                      if find in filename:
+                        full_path = os.path.join(dir_path, filename)
+                        return full_path
+                      
+                #TODO(Yoojin): Change Directory for generalization (Hard Coded)
+                image_path = find_root('/data/tmp/data', image_filename[0]) # change dir
+                img = draw_boxes_on_image_val(image_path = image_path, 
                                               pred_boxes= pred_boxes_norm, 
                                               gt_boxes= gt_boxes,
                                               pred_labels= labels, 
                                               gt_labels= gt_labels,
-                                              save_path=f'/home/yoojinoh/Others/PR/ATRIDA_prom5_AIproject/Pedestrian-Detection/outputs/valid_{image_filename[0]}') # change dir
+                                              save_path=f'/home/yoojinoh/Others/PR/prom5_AIproject_ATRIDA/Pedestrian-Detection/outputs/valid_{image_filename[0]}') # change dir
                 
                 # Log some info (optional)
                 progress_bar.set_description(desc=f"Validation IoU: {mean_iou:.4f}")
@@ -171,11 +130,9 @@ def valid(device, model, valid_loader, iou_thresh=0.3, confidence_threshold=0.5)
 
 
 def main():
-      # TODO(Yoojin): Call wandb for log
-      get_log() 
+#      get_log() 
 
-      base_root = '/home/yoojinoh/Others/PR/ATRIDA_prom5_AIproject/Pedestrian-Detection'
-      best_train_loss = 99999
+      base_root = '/home/yoojinoh/Others/PR/prom5_AIproject_ATRIDA/Pedestrian-Detection'
       best_valid_score = -1 
 
       train_dataset = create_train_dataset()
@@ -187,12 +144,14 @@ def main():
       print(f'# of valid5ation samples : {len(valid_dataset)}')   
 
       model = build_model(NUM_CLASS).to(device)    
-      wandb.watch(model) # Track model information
+#      wandb.watch(model) # Track model information
       
       params = [p for p in model.parameters() if p.requires_grad]
-      optimizer = torch.optim.SGD(params, lr=LR,momentum=0.9, weight_decay=0.0005)
 
-      lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=3,gamma=0.1)
+      optimizer = torch.optim.SGD(params, lr=LR,momentum=0.9, weight_decay=0.0001)
+#      lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=3,gamma=0.1)
+      lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=3, verbose=True)
+
 
       train_loss_list = []
       val_loss_list = []
@@ -213,12 +172,12 @@ def main():
             end = time.time()
             print(f"Took {((end - start) / 60):.3f} minutes for epoch {epoch}")
 
-            # Log metrics to wandb
-            wandb.log({
-                "train_loss": train_tot_loss,
-                "valid_iou": final_avg_iou,
-                "epoch": epoch + 1
-            })
+            # # Log metrics to wandb
+            # wandb.log({
+            #     "train_total_loss": train_tot_loss,
+            #     "valid_total_avg_iou": final_avg_iou,
+            #     "epoch": epoch + 1
+            # })
 
             if best_valid_score < final_avg_iou and final_avg_iou > 0.6:
                   best_valid_score = final_avg_iou 
@@ -231,11 +190,10 @@ def main():
                     'epoch': epoch+1,
                     'model_state_dict': model.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),}, checkpoint_path)
-                  wandb.save(checkpoint_path)
+                #  wandb.save(checkpoint_path)
 
             time.sleep(2)
-      wandb.finish()
+      # wandb.finish()
 
 if __name__ == "__main__":
     main()
-
