@@ -26,8 +26,7 @@ from torchvision.transforms import ToTensor, transforms
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
-from custom_utils import collate_fn, train_transform, valid_transform, normalize_bbox, visualize_image
-from config import BATCH_SIZE, SEED, IMG_SIZE, EPOCHS, NUM_CLASS
+from custom_utils import collate_fn, train_transform, valid_transform, normalize_bbox, load_yaml
 import os
 import json
 import cv2
@@ -37,17 +36,15 @@ from torch.utils.data import Dataset
 from collections import defaultdict
 from tqdm import tqdm 
 
-torch.manual_seed(SEED) 
-
-
 class PedestrianDataset(Dataset):
-    def __init__(self, root: str, train: bool, split: str = "train", transforms=None):
+    def __init__(self, root: str, train: bool, split: str = "train", transforms=None, image_size=[640, 360]):
         super().__init__()
         
         self.root = root
         self.train = train
         self.transforms = transforms
-
+        self.image_size = image_size 
+        
         annot_path = os.path.join(root, f'{split.lower()}_annotations_toy.json') # TODO: Hard Coded
 
         with open(annot_path) as f:
@@ -114,7 +111,7 @@ class PedestrianDataset(Dataset):
         image = cv2.imread(image_path) # 1080x1920x3=hxwxc
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(np.float32)
 
-        WIDTH, HEIGHT = IMG_SIZE[0], IMG_SIZE[1]
+        WIDTH, HEIGHT = self.image_size[0], self.image_size[1]
         image_resized = cv2.resize(image, (WIDTH, HEIGHT))  # Resize images to (360, 640, 3)
 
         image_resized /= 255.0
@@ -162,8 +159,10 @@ class PedestrianDataset(Dataset):
                 transformed = self.transforms(image=image_resized, bboxes=boxes, labels=labels)
                 _image = transformed['image'] # 3x360x640
                 _bboxes = transformed['bboxes']
-
-                check = visualize_image(_image) #CHECK (Yoojin)
+                
+                 
+                """ # Sanity Check
+                check = visualize_image(_image) #CHECK (Yoojin) """
 
                 valid_boxes = []
                 for box in _bboxes:
@@ -199,14 +198,14 @@ def create_valid_dataset():
     val_dataset = PedestrianDataset(root='/data/tmp/', train= False, split="val", transforms=valid_transform())
     return val_dataset
 
-def create_train_loader(train_dataset):
+def create_train_loader(train_dataset, batch_size):
     train_loader = DataLoader(train_dataset,
-                              batch_size = BATCH_SIZE,
+                              batch_size = batch_size,
                               shuffle= True,
                               collate_fn= collate_fn)
     return train_loader
-def create_valid_loader(val_dataset):
+def create_valid_loader(val_dataset, batch_size):
     valid_loader = DataLoader(val_dataset,
-                              batch_size = BATCH_SIZE,
+                              batch_size = batch_size,
                               shuffle= False,collate_fn= collate_fn)
     return valid_loader

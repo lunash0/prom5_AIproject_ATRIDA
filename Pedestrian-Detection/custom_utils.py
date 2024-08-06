@@ -1,6 +1,5 @@
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
-from config import IMG_SIZE
 import torch 
 import numpy as np
 import json
@@ -8,17 +7,28 @@ import cv2
 import matplotlib.pyplot as plt
 import re 
 import os 
-from torchvision.ops import box_iou, nms 
+from torchvision.ops import nms 
 from torchvision.transforms import v2 as T
+import yaml 
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
+import wandb 
 
 def collate_fn(batch):
     return tuple(zip(*batch))
 
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
+def load_yaml(file_path: str) -> dict:
+    with open(file_path) as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+    return config
+
+def get_wh(image_size):
+    w = image_size[0]
+    h = image_size[1]
+    return w, h # width, height
 
 def train_transform():
-    WIDTH, HEIGHT = IMG_SIZE[0], IMG_SIZE[1]
+    WIDTH, HEIGHT = get_wh(load_yaml('data/configs.yaml')['train']['image_size'])
     return A.Compose([
         A.HorizontalFlip(p=0.5),
         A.RandomBrightnessContrast(p=0.2),
@@ -28,7 +38,7 @@ def train_transform():
     ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['labels'])) # pascal_voc [x_min, x_max, x_max, y_max]
 
 def valid_transform():
-    WIDTH, HEIGHT = IMG_SIZE[0], IMG_SIZE[1]
+    WIDTH, HEIGHT = get_wh(load_yaml('data/configs.yaml')['train']['image_size'])
     return A.Compose([
         A.Resize(height=HEIGHT, width=WIDTH),  
         # A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
@@ -37,7 +47,7 @@ def valid_transform():
 
 
 def box_denormalize(x1, y1, x2, y2, width, height):
-    WIDTH, HEIGHT = IMG_SIZE[0], IMG_SIZE[1]
+    WIDTH, HEIGHT = get_wh(load_yaml('data/configs.yaml')['train']['image_size'])
     x1 = (x1 / WIDTH) * width
     y1 = (y1 / HEIGHT) * height 
     x2 = (x2 / WIDTH) * width 
@@ -78,7 +88,7 @@ def filter_boxes_by_score(output, threshold):
 
 
 def get_image_path(image_id:int, root:str)->str:
-    return os.path.join(root, f'MP_SEL_{str(image_id).zfill(6)}.jpg')  # f'image ({image_id}).jpg'
+    return os.path.join(root, f'MP_SEL_{str(image_id).zfill(6)}.jpg')  # NOTE: Hardcoded
 
 def draw_boxes_on_image_val(image_path, pred_boxes, gt_boxes, pred_labels, gt_labels, save_path):
     image = cv2.imread(image_path)
@@ -97,6 +107,19 @@ def draw_boxes_on_image_val(image_path, pred_boxes, gt_boxes, pred_labels, gt_la
     print(f'Saved image with bounding boxes to {save_path}')
 
 def draw_boxes_on_image(image, boxes, labels, save_path):
+    """
+    for sanity check
+    
+    e.g.
+        image_path = find_root('/data/tmp/data', image_filename[0]) # change dir
+        img = draw_boxes_on_image_val(image_path = image_path, 
+            pred_boxes= pred_boxes_norm, 
+            gt_boxes= gt_boxes,
+            pred_labels= labels, 
+            gt_labels= gt_labels,
+            save_path=f'/home/yoojinoh/Others/PR/prom5_AIproject_ATRIDA/Pedestrian-Detection/outputs/valid_{image_filename[0]}') # change dir
+        
+    """
     for box, label in zip(boxes, labels):
         x1, y1, x2, y2 = [int(coord) for coord in box]
         cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
@@ -109,3 +132,11 @@ def visualize_image(image_tensor):
     image = (image * 255).astype(np.uint8)
     plt.imshow(image)
     plt.show()
+
+
+ 
+def get_log(configs):
+    wandb.login()
+    wandb.init(project=configs['project'],
+               entity=configs['entity'],
+               name =configs['name'])
