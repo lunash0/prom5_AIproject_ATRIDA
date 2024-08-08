@@ -1,0 +1,34 @@
+train:
+  batch_size: 4
+  seed: 42
+  image_size: [640, 360]
+  num_classes: 2 # person, objecT(dog, cat)
+  learning_rate: 0.0001 #0.005 0.001 0.007
+  scheduler: 'ReduceLROnPlateau' # StepLR
+  optimizer: 'SGD' # SGD
+  epochs: 30
+  model_name: 'retinanet'
+  iou_threshold: 0.4
+  confidence_threshold: 0.4
+  device: 5
+  output_path: '/home/yoojinoh/Others/PR/data/outputs/noHue_0.40.4_large_5'
+  early_stop: True 
+  early_stop_patience: 20
+
+log:
+  project: 'Pedestrian-Detection-all'
+  entity: 'finallyupper'
+  name: 'noHue_0.40.4_large_5' # Wandb run name  noHue_0.40.4_large_1
+
+test:
+  video_name: 'i0.4c0.4_e30_lr0.007_video2'
+  output_path: '/home/yoojinoh/Others/PR/prom5_AIproject_ATRIDA/Pedestrian-Detection/outputs/i0.4c0.4_e30_lr0.007'
+  input_video_path: '/home/yoojinoh/Others/PR/prom5_AIproject_ATRIDA/Pedestrian-Detection/data/videos/007aeb45-3e75ce0e.mov'
+  model_path: '/home/yoojinoh/Others/PR/prom5_AIproject_ATRIDA/Pedestrian-Detection/outputs/i0.4c0.4_e30_lr0.007/best_retinanet_e13s0.85l1.01.pth'
+  num_classes: 2
+  score_threshold: 0.25 # 0.25 0.4
+  iou_threshold: 0.3
+  confidence_threshold: 0.3
+  device: 5
+  warning_distance: 167
+

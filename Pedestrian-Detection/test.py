@@ -54,18 +54,18 @@ def draw_boxes_on_frame(frame, boxes, labels, scores, score_threshold, warning_d
             if distance < warning_distance:
                 warning_text = "Collision Warning!"
                 cv2.putText(frame, warning_text, (x1, y2 + 30), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 3)
-        else:
-            x1, y1, x2, y2 = map(int, box)
-            # Calculate the distance from the bottom of the frame to the bottom of the bounding box
-            distance = frame_height - y2
-            color = (255, 0, 0)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(frame, f"{label} Distance: {distance}px", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        # else:
+        #     x1, y1, x2, y2 = map(int, box)
+        #     # Calculate the distance from the bottom of the frame to the bottom of the bounding box
+        #     distance = frame_height - y2
+        #     color = (255, 0, 0)
+        #     cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+        #     cv2.putText(frame, f"{label} Distance: {distance}px", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
-            # If the distance is less than the warning distance, display a collision warning
-            if distance < warning_distance:
-                warning_text = "Collision Warning!"
-                cv2.putText(frame, warning_text, (x1, y2 + 30), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 3)            
+        #     # If the distance is less than the warning distance, display a collision warning
+        #     if distance < warning_distance:
+        #         warning_text = "Collision Warning!"
+        #         cv2.putText(frame, warning_text, (x1, y2 + 30), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 3)            
     
     return frame
 

@@ -9,7 +9,6 @@ from torchvision.models.detection.retinanet import RetinaNetHead, RetinaNetClass
 import torch 
 
 def build_model(num_classes):
-    num_classes = 2 #CHECK: Hardcoded
     model = retinanet_resnet50_fpn(pretrained=True)
     
     in_features = model.head.classification_head.conv[0][0].in_channels

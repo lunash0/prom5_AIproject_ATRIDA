@@ -1,13 +1,8 @@
 import os
 import json
 import xml.etree.ElementTree as ET
-from collections import defaultdict
-import progressbar
+from tqdm import tqdm 
 from sklearn.model_selection import train_test_split
-import torch
-from torch.utils.data import Dataset, DataLoader
-import cv2
-import numpy as np
 
 def parse_xml_for_person(xml_file):
     tree = ET.parse(xml_file)
@@ -71,7 +66,7 @@ def process_and_save(xml_files, output_file_path):
     image_id_counter = 0
     annotation_id_counter = 0
 
-    for xml_file_path in xml_files:
+    for xml_file_path in tqdm(xml_files):
         images, annotations = parse_xml_for_person(xml_file_path)
 
         for img in images:
@@ -85,7 +80,7 @@ def process_and_save(xml_files, output_file_path):
             cumulative_annotations.append(ann)
             annotation_id_counter += 1
 
-        print(f'Processed {xml_file_path}')
+    #    print(f'Processed {xml_file_path}')
 
     coco_format_data = {
         "images": cumulative_images,
@@ -102,7 +97,7 @@ def process_and_save(xml_files, output_file_path):
 
 
 def main():
-    dataset_base_folder = '/home/yoojinoh/Others/PR/PedDetect-Data/aihub/Bbox_0250'
+    dataset_base_folder = '/data/tmp/data'
     xml_files = []
     for subdir, _, files in (os.walk(dataset_base_folder)):
         for file in files:
@@ -110,9 +105,9 @@ def main():
                 xml_file_path = os.path.join(subdir, file)
                 xml_files.append(xml_file_path)
     
-    train_files, val_files = train_test_split(xml_files, test_size=0, random_state=42)
+    train_files, val_files = train_test_split(xml_files, test_size=0.2, random_state=42)
 
-    train_output_path = '/home/yoojinoh/Others/PR/PedDetect-Data/aihub/train_annotations.json' #train_annotations_1=유진 only 데이터셋
+    train_output_path = '/home/yoojinoh/Others/PR/PedDetect-Data/aihub/train_annotations.json' 
     process_and_save(train_files, train_output_path)
 
     val_output_path = '/home/yoojinoh/Others/PR/PedDetect-Data/aihub/val_annotations.json'

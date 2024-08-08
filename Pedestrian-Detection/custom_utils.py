@@ -1,5 +1,3 @@
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
 import torch 
 import numpy as np
 import json
@@ -32,6 +30,7 @@ def train_transform():
     return A.Compose([
         A.HorizontalFlip(p=0.5),
         A.RandomBrightnessContrast(p=0.2),
+        # A.HueSaturationValue(p=0.4),
         A.Resize(height=HEIGHT, width=WIDTH), 
         # A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ToTensorV2()  
@@ -87,8 +86,8 @@ def filter_boxes_by_score(output, threshold):
     return filtered_output
 
 
-def get_image_path(image_id:int, root:str)->str:
-    return os.path.join(root, f'MP_SEL_{str(image_id).zfill(6)}.jpg')  # NOTE: Hardcoded
+# def get_image_path(image_id:int, root:str)->str:
+#     return os.path.join(root, f'MP_SEL_{str(image_id).zfill(6)}.jpg')  # NOTE: Hardcoded
 
 def draw_boxes_on_image_val(image_path, pred_boxes, gt_boxes, pred_labels, gt_labels, save_path):
     image = cv2.imread(image_path)

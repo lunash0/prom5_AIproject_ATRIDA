@@ -55,103 +55,6 @@ def valid(device, model, valid_loader, iou_thresh=0.4, confidence_threshold=0.4)
     progress_bar = tqdm(valid_loader, total=len(valid_loader))
 
     iou_scores = []
-    all_preds = {0: [], 1: []}  # Dictionary to store predictions for each class
-    all_targets = {0: [], 1: []}  # Dictionary to store targets for each class
-
-    for i, data in enumerate(progress_bar):
-        images, targets, width, height, _ = data
-        images = [img.to(device) for img in images]
-        
-        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-
-        with torch.no_grad():
-            outputs = model(images)
-
-        # Apply NMS and Confidence Score Threshold
-        outputs = [apply_nms(output, iou_thresh) for output in outputs]
-        outputs = [filter_boxes_by_score(output, confidence_threshold) for output in outputs]
-
-        image_ids = [int(t['image_id']) for t in targets]
-
-        for idx, output in enumerate(outputs):
-            if len(output['boxes']) > 0: # pass if it predicted as blank
-                pred_boxes = []
-                pred_boxes_norm = []
-                boxes = output["boxes"].cpu().numpy()
-                labels = output["labels"].cpu().numpy()
-                scores = output["scores"].cpu().numpy()
-
-                gt_boxes = targets[idx]['boxes'].cpu() #.numpy()
-                gt_labels = targets[idx]['labels'].cpu().numpy()
-                
-                # Collect predictions and targets for metrics
-                for label in np.unique(gt_labels):
-                    class_indices = (gt_labels == label)
-                    all_targets[label].extend(class_indices.numpy())
-                    
-                for label in np.unique(labels):
-                    class_indices = (labels == label)
-                    all_preds[label].extend(class_indices.numpy())
-
-                for box, label, score in zip(boxes, labels, scores):
-                    x1, y1, x2, y2 = box
-                    x1_norm, y1_norm, x2_norm, y2_norm = box_denormalize(x1, y1, x2, y2, width[idx], height[idx])
-                    pred_boxes.append([x1, y1, x2, y2])
-                    pred_boxes_norm.append([x1_norm, y1_norm, x2_norm, y2_norm])
-
-                # Calculate IoU between predicted boxes and ground truth boxes
-                pred_boxes = torch.tensor(pred_boxes)
-                ious = box_iou(pred_boxes, gt_boxes)
-
-                if ious.numel() > 0:
-                    mean_iou = ious.max(dim=1)[0].mean().item()
-                else:
-                    mean_iou = 0.0
-
-                iou_scores.append(mean_iou)
-                # wandb.log({"Validation mean IoU ": mean_iou})
-
-                progress_bar.set_description(desc=f"Validation IoU: {mean_iou:.4f}")
-
-    final_avg_iou = sum(iou_scores) / len(iou_scores) if len(iou_scores) > 0 else 0.0
-    print(f"> Final Average IoU : {final_avg_iou} = {sum(iou_scores)} / {len(iou_scores)}")
-
-    # Calculate F1 Score and ROC Curve for each class
-    f1_scores = {}
-    roc_auc_scores = {}
-    
-    for label in [0, 1]:  # For pedestrian (0) and animal (1)
-        y_true = np.array(all_targets[label])
-        y_pred = np.array(all_preds[label])
-        
-        # F1 Score
-        f1_scores[label] = f1_score(y_true, y_pred, average='binary')
-
-        # ROC Curve
-        fpr, tpr, _ = roc_curve(y_true, y_pred, pos_label=label)
-        roc_auc_scores[label] = auc(fpr, tpr)
-
-    # Log F1 Scores and ROC AUC
-    wandb.log({
-        "Validation mean IoU": final_avg_iou,
-        "F1 Score (Pedestrian)": f1_scores[0],
-        "F1 Score (Animal)": f1_scores[1],
-        "ROC AUC (Pedestrian)": roc_auc_scores[0],
-        "ROC AUC (Animal)": roc_auc_scores[1]
-    })
-    
-    print(f"F1 Score (Pedestrian): {f1_scores[0]:.4f}")
-    print(f"F1 Score (Animal): {f1_scores[1]:.4f}")
-    print(f"ROC AUC (Pedestrian): {roc_auc_scores[0]:.4f}")
-    print(f"ROC AUC (Animal): {roc_auc_scores[1]:.4f}")
-
-    return iou_scores, final_avg_iou
-
-""" 
-def valid(device, model, valid_loader, iou_thresh=0.4, confidence_threshold=0.4):
-    progress_bar = tqdm(valid_loader, total=len(valid_loader))
-
-    iou_scores = []
 
     for i, data in enumerate(progress_bar):
         images, targets, width, height, _ = data
@@ -210,7 +113,7 @@ def valid(device, model, valid_loader, iou_thresh=0.4, confidence_threshold=0.4)
     final_avg_iou = sum(iou_scores) / len(iou_scores) if len(iou_scores) > 0 else 0.0
     print(f"> Final Average IoU : {final_avg_iou} = {sum(iou_scores)} / {len(iou_scores)}")
     return iou_scores, final_avg_iou
-"""
+
 
 def main():
       cfg = load_yaml('data/configs.yaml')['train']
@@ -224,8 +127,13 @@ def main():
       learning_rate = cfg['learning_rate']
       output_path = cfg['output_path']
       scheduler = cfg['scheduler']
+      use_earlystop = cfg['early_stop']
+      opt = cfg['optimizer']
+
+      os.makedirs(output_path, exist_ok=True)
+          
       print('Start training for Pedestrian Detection ...')
-      print(f'Using device: {device} | Batch size: {batch_size} | Epochs: {epochs} | Learning rate: {learning_rate} | Scheduler: {scheduler}')
+      print(f'Using device: {device} | Batch size: {batch_size} | Epochs: {epochs} | Learning rate: {learning_rate} | Optimizer: {opt} | Scheduler: {scheduler} | Early Stop: {use_earlystop}')
 
       train_dataset = create_train_dataset()
       valid_dataset = create_valid_dataset()
@@ -236,11 +144,16 @@ def main():
       print(f'# of valid5ation samples : {len(valid_dataset)}')   
 
       model = build_model(cfg['num_classes']).to(device)    
-#      wandb.watch(model) # Track model information
+      wandb.watch(model) # Track model information
       
       params = [p for p in model.parameters() if p.requires_grad]
 
-      optimizer = torch.optim.SGD(params, lr=learning_rate, momentum=0.9, weight_decay=0.0001)
+      if opt == 'Adam':
+          optimizer = torch.optim.Adam(params, lr=learning_rate)
+      elif opt == 'SGD':
+        optimizer = torch.optim.SGD(params, lr=learning_rate, momentum=0.9, weight_decay=0.0001)
+      else:
+          optimizer = None 
 
       if scheduler == 'StepLR':
         lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=3,gamma=0.1)
@@ -249,6 +162,10 @@ def main():
       else:
         lr_scheduler = None
       
+      if use_earlystop:
+          early_stop_patience = cfg['early_stop_patience']
+          early_stop_counter = 0
+
       for epoch in range(epochs):
             print(f"\nEpoch {epoch+1}/{epochs}...")
             start = time.time()
@@ -268,7 +185,6 @@ def main():
             wandb.log({
                 "train_total_loss": train_tot_loss,
                 "valid_total_avg_iou": final_avg_iou,
-                "epoch": epoch + 1
             })
 
             if best_valid_score < final_avg_iou and final_avg_iou > 0.6:
@@ -285,7 +201,12 @@ def main():
                     'optimizer_state_dict': optimizer.state_dict(),}, checkpoint_path)
 
                   wandb.save(checkpoint_path)
-
+                  early_stop_counter = 0
+            else:
+                early_stop_counter += 1
+                if early_stop_counter >= early_stop_patience:
+                  print("[INFO] Early stopping triggered!")
+                  break
             time.sleep(2)
       wandb.finish()
 

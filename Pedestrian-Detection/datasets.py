@@ -45,7 +45,7 @@ class PedestrianDataset(Dataset):
         self.transforms = transforms
         self.image_size = image_size 
         
-        annot_path = os.path.join(root, f'{split.lower()}_annotations_toy.json') # TODO: Hard Coded
+        annot_path = os.path.join(root, f'{split.lower()}_annotations.json') # TODO: Hard Coded
 
         with open(annot_path) as f:
             raw_annots = json.load(f)["annotations"]
