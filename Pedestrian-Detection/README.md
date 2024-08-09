@@ -132,12 +132,12 @@ Pedestrian-Detection/
 │ └── ... # Other configuration files
 │
 ├── data/
-│ ├── outputs/ # Directory where output results are stored
+│ ├── outputs/ 
 │ └── ... # Other data files
 │
 ├── results/
-│ ├── wandb_meanf_train_.png # Example: Training metrics plot
-│ ├── wandb_meanf_val.png # Example: Validation metrics plot
+│ ├── wandb_meanf_train_.png 
+│ ├── wandb_meanf_val.png #
 │ └── ... # Other result images
 │
 ├── scripts/
