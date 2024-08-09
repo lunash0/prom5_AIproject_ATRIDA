@@ -61,10 +61,10 @@ We use `wandb` for visualizing training and validation metrics. Below are the pl
 <table>
   <tr>
     <td>
-      <img src="./results/wandb_meanf_train_.png" alt="Training Metrics" width="400" />
+      <img src="./results/wandb_meanf_train_.png" alt="Training Metrics" width="600" />
     </td>
     <td>
-      <img src="./results/wandb_meanf_val.png" alt="Validation Metrics" width="400" />
+      <img src="./results/wandb_meanf_val.png" alt="Validation Metrics" width="600" />
     </td>
   </tr>
 </table>
