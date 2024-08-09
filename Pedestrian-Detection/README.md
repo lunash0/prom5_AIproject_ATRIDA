@@ -2,7 +2,7 @@
 This repository contains the codebase for the Pedestrian Detection component of our Driving Guidance Project.
 
 ## Examples
-![KOR_1](./results/test_video2_capture1.png)
+<img src="./results/test_video2_capture1.png" alt="KOR_1" width="600" />
 
 ## Getting Started
 Clone this repository:  
@@ -84,10 +84,10 @@ RetinaNet with ResNet50 FPN has demonstrated superior performance in our object 
 
 ## Testing On Real-time video
 We used `noHue_0.50.5_large_re_3` as our model for the best validation IoU score. 
-### Examples 
-![KOR_1](./results/test_video2_capture1.png)
-![Kaggle_2](./results/test_video_kaggle_capture2.png)
-![Kaggle_1](./results/test_video_kaggle_capture1.png)
+
+<img src="./results/test_video2_capture1.png" alt="KOR_1" width="600" />
+<img src="./results/test_video_kaggle_capture2.png" alt="Kaggle_2" width="600" />
+<img src="./results/test_video_kaggle_capture1.png" alt="Kaggle_1" width="600" />
 
 ## Structure of configurations
 ```
