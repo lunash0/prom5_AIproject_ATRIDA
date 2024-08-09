@@ -1,5 +1,6 @@
 from model import build_model
-from custom_utils import *
+from utils import * 
+from engine import get_log, default_argument_parser, setup 
 from tqdm.auto import tqdm 
 from datasets import (
     create_train_dataset, create_valid_dataset, 
@@ -10,8 +11,6 @@ import time
 from torchvision.ops import box_iou 
 import wandb 
 from torch import nn as nn 
-from sklearn.metrics import f1_score, roc_curve, auc
-import numpy as np 
 
 def train(device, model, train_loader, optimizer, scheduler):
     train_losses = []
@@ -19,9 +18,9 @@ def train(device, model, train_loader, optimizer, scheduler):
     progress_bar = tqdm(train_loader, total=len(train_loader))
 
     for i, data in enumerate(progress_bar):
-        images, targets, image_filename = data
+        images, targets, _ = data
 
-        images = [img.to(device) for img in images] # images[0].shape = 3x360x640 (cxhxw)
+        images = [img.to(device) for img in images] 
                 
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
@@ -31,16 +30,13 @@ def train(device, model, train_loader, optimizer, scheduler):
         losses = sum(loss for loss in loss_dict.values())
         losses.backward()
 
-        nn.utils.clip_grad_norm_(model.parameters(), max_norm=2.0)  # Gradient clipping
+        nn.utils.clip_grad_norm_(model.parameters(), max_norm=2.0)  
 
         optimizer.step()
 
         loss_value = losses.item()
         running_loss += loss_value
         train_losses.append(loss_value)
-
-        # Log the loss to wandb
-        # wandb.log({"training_loss": loss_value})
                 
         progress_bar.set_description(desc=f"Training Loss: {loss_value:.4f}")
 
@@ -51,13 +47,13 @@ def train(device, model, train_loader, optimizer, scheduler):
 
     return train_losses, avg_loss
 
-def valid(device, model, valid_loader, iou_thresh=0.4, confidence_threshold=0.4):
+def valid(device, model, valid_loader, iou_thresh=0.4, confidence_threshold=0.4, cfg_dir=''):
     progress_bar = tqdm(valid_loader, total=len(valid_loader))
 
     iou_scores = []
 
     for i, data in enumerate(progress_bar):
-        images, targets, width, height, _ = data
+        images, targets, width, height, image_filename = data
         images = [img.to(device) for img in images]
         
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
@@ -69,8 +65,6 @@ def valid(device, model, valid_loader, iou_thresh=0.4, confidence_threshold=0.4)
         outputs = [apply_nms(output, iou_thresh) for output in outputs]
         outputs = [filter_boxes_by_score(output, confidence_threshold) for output in outputs]
 
-        image_ids = [int(t['image_id']) for t in targets]
-
         for idx, output in enumerate(outputs):
             if len(output['boxes']) > 0: # pass if it predicted as blank
                 pred_boxes = []
@@ -79,12 +73,12 @@ def valid(device, model, valid_loader, iou_thresh=0.4, confidence_threshold=0.4)
                 labels = output["labels"].cpu().numpy()
                 scores = output["scores"].cpu().numpy()
 
-                gt_boxes = targets[idx]['boxes'].cpu() #.numpy()
-                gt_labels = targets[idx]['labels'].cpu() # .numpy()
+                gt_boxes = targets[idx]['boxes'].cpu() 
+                gt_labels = targets[idx]['labels'].cpu() 
                 
                 for box, label, score in zip(boxes, labels, scores):
                         x1, y1, x2, y2 = box
-                        x1_norm, y1_norm, x2_norm, y2_norm = box_denormalize(x1, y1, x2, y2, width[idx], height[idx])
+                        x1_norm, y1_norm, x2_norm, y2_norm = box_denormalize(x1, y1, x2, y2, width[idx], height[idx], cfg_dir)
                         pred_boxes.append([x1, y1, x2, y2])
                         pred_boxes_norm.append([x1_norm, y1_norm, x2_norm, y2_norm])
 
@@ -98,8 +92,8 @@ def valid(device, model, valid_loader, iou_thresh=0.4, confidence_threshold=0.4)
                     mean_iou = 0.0
 
                 iou_scores.append(mean_iou)
-                # wandb.log({"Validation mean IoU ": mean_iou})
 
+                # For sanity check
                 def find_root(root, find):
                   import os
                   for dir_path, _, filenames in (os.walk(root)):
@@ -115,36 +109,41 @@ def valid(device, model, valid_loader, iou_thresh=0.4, confidence_threshold=0.4)
     return iou_scores, final_avg_iou
 
 
-def main():
-      cfg = load_yaml('data/configs.yaml')['train']
+def main(args):
+      cfg_dir, output_dir, run_name = setup(args)
+
+      cfg = load_yaml(cfg_dir)['train']
       device = torch.device(f'cuda:{cfg["device"]}' if torch.cuda.is_available() else 'cpu')
 
-      get_log(load_yaml('data/configs.yaml')['log']) # Initialize wandb
+      if len(run_name) == 0:
+          run_name = os.path.basename(cfg_dir).split('.yaml')[0]
+
+      get_log(run_name, load_yaml(cfg_dir)['log']) # Initialize wandb
 
       best_valid_score = -1 
       batch_size = cfg['batch_size']
       epochs = cfg['epochs']
       learning_rate = cfg['learning_rate']
-      output_path = cfg['output_path']
       scheduler = cfg['scheduler']
       use_earlystop = cfg['early_stop']
       opt = cfg['optimizer']
 
-      os.makedirs(output_path, exist_ok=True)
+      output_dir = os.path.join(output_dir, cfg_dir.split('/')[-1].split('.yaml')[0])
+      os.makedirs(output_dir, exist_ok=True)
           
       print('Start training for Pedestrian Detection ...')
       print(f'Using device: {device} | Batch size: {batch_size} | Epochs: {epochs} | Learning rate: {learning_rate} | Optimizer: {opt} | Scheduler: {scheduler} | Early Stop: {use_earlystop}')
 
-      train_dataset = create_train_dataset()
-      valid_dataset = create_valid_dataset()
+      train_dataset = create_train_dataset(cfg_dir)
+      valid_dataset = create_valid_dataset(cfg_dir)
       train_loader = create_train_loader(train_dataset, batch_size)
       valid_loader = create_valid_loader(valid_dataset, batch_size)
 
       print(f"# of training samples : {len(train_dataset)}")
-      print(f'# of valid5ation samples : {len(valid_dataset)}')   
+      print(f'# of validation samples : {len(valid_dataset)}')   
 
       model = build_model(cfg['num_classes']).to(device)    
-      wandb.watch(model) # Track model information
+      wandb.watch(model) 
       
       params = [p for p in model.parameters() if p.requires_grad]
 
@@ -173,7 +172,7 @@ def main():
             model.train()
             train_loss, train_tot_loss = train(device, model, train_loader, optimizer, lr_scheduler)
             model.eval()
-            iou_scores, final_avg_iou = valid(device, model, valid_loader, cfg['iou_threshold'], cfg['confidence_threshold'])
+            iou_scores, final_avg_iou = valid(device, model, valid_loader, cfg['iou_threshold'], cfg['confidence_threshold'], cfg_dir)
             
             print(f"Epoch [{epoch+1}] train loss: {train_tot_loss:.3f}")   
             print(f"Epoch [{epoch+1}] validation IoU score: {final_avg_iou:.3f}")   
@@ -193,7 +192,7 @@ def main():
                   print(f"\nBest validation score(IoU): {final_avg_iou}")
                   print(f"\nSaving best model for epoch: {epoch+1}\n")
                   save_model = f'best_{cfg["model_name"]}_e{epoch + 1}s{final_avg_iou:.2f}l{train_tot_loss:.2f}.pth'
-                  checkpoint_path = os.path.join(output_path, save_model)
+                  checkpoint_path = os.path.join(output_dir, save_model)
 
                   torch.save({
                     'epoch': epoch+1,
@@ -206,9 +205,11 @@ def main():
                 early_stop_counter += 1
                 if early_stop_counter >= early_stop_patience:
                   print("[INFO] Early stopping triggered!")
-                  break
+                  exit(1)
             time.sleep(2)
       wandb.finish()
 
 if __name__ == "__main__":
-    main()
+    args = default_argument_parser()
+    print("Command Line Args:", args)
+    main(args)

@@ -1,3 +1,3 @@
 """
-Codebase for "Pedestrian detection for autonomous driving".
+Codebase for "Pedestrian detection for driving guidance".
 """

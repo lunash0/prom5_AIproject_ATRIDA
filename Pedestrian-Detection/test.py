@@ -2,22 +2,12 @@ import torch
 import cv2
 from torchvision.transforms import functional as F
 from torchvision.ops import nms
-import time
 from tqdm import tqdm
-from custom_utils import * 
+from utils import * 
+from engine import default_argument_parser, setup
 from model import load_model
 import warnings
 warnings.filterwarnings('ignore')
-
-def filter_boxes_by_score(output, threshold):
-    keep = output['scores'] > threshold
-    filtered_output = {k: v[keep] for k, v in output.items()}
-    return filtered_output
-
-def apply_nms(orig_prediction, iou_thresh=0.3):
-    keep = nms(orig_prediction['boxes'], orig_prediction['scores'], iou_thresh)
-    final_prediction = {k: v[keep] for k, v in orig_prediction.items()}
-    return final_prediction
 
 def process_frame(frame, model, device, iou_thresh=0.3, confidence_threshold=0.4):
     image = F.to_tensor(frame).unsqueeze(0).to(device)
@@ -43,30 +33,15 @@ def draw_boxes_on_frame(frame, boxes, labels, scores, score_threshold, warning_d
             label_text = 'Person' if label == 0 else 'Object'
             color = (255, 255, 0) if label_text == 'Person' else (0, 255, 255)
 
-            # Calculate the distance from the bottom of the frame to the bottom of the bounding box
             distance = frame_height - y2
 
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
             cv2.putText(frame, f"{label_text} Score: {score:.2f} Distance: {distance}px", 
                         (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
-            # If the distance is less than the warning distance, display a collision warning
             if distance < warning_distance:
                 warning_text = "Collision Warning!"
                 cv2.putText(frame, warning_text, (x1, y2 + 30), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 3)
-        # else:
-        #     x1, y1, x2, y2 = map(int, box)
-        #     # Calculate the distance from the bottom of the frame to the bottom of the bounding box
-        #     distance = frame_height - y2
-        #     color = (255, 0, 0)
-        #     cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-        #     cv2.putText(frame, f"{label} Distance: {distance}px", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-
-        #     # If the distance is less than the warning distance, display a collision warning
-        #     if distance < warning_distance:
-        #         warning_text = "Collision Warning!"
-        #         cv2.putText(frame, warning_text, (x1, y2 + 30), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 3)            
-    
     return frame
 
 def detect_frame(model, img_frame, device, score_threshold, iou_threshold, confidence_threshold, warning_distance=167):
@@ -82,7 +57,7 @@ def detect_video(model, input_path, output_path, device, score_thr, iou_thr, con
     video_writer = cv2.VideoWriter(output_path, codec, video_fps, video_size)
 
     frame_cnt = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    print(f'Total number of frames: {frame_cnt}')
+    print(f'[INFO] Total number of frames: {frame_cnt}')
 
     with tqdm(total=frame_cnt, desc="Processing Frames") as pbar:
         while True:
@@ -98,16 +73,29 @@ def detect_video(model, input_path, output_path, device, score_thr, iou_thr, con
 
     video_writer.release()
     cap.release()
-    print(f'Saved video to {output_path}')
+    print(f'[INFO] Saved video to {output_path}')
 
-if __name__ == "__main__":
-    cfg = load_yaml('data/configs.yaml')['test']
-    output_video_path = os.path.join(cfg['output_path'], cfg['video_name'] + '.mp4') 
+def main(args):
+    cfg_dir, output_dir, model_path, video_name = setup(args)
+
+    if len(video_name) == 0:
+        video_name = os.path.basename(model_path).split('.pth')[0] + "_video"
+
+    cfg = load_yaml(cfg_dir)['test']
+    output_video_path = os.path.join(output_dir, video_name + '.mp4') 
     device = torch.device(f'cuda:{cfg["device"]}' if torch.cuda.is_available() else 'cpu')
 
-    print('Load model...')
-    model = load_model(cfg['model_path'], cfg['num_classes'], device) # eval mode
-    print('Model loaded successfully')
-    print(f'Processing video: {cfg["input_video_path"]}')
-    print(f'Thresholds: Score: {cfg["score_threshold"]}, IoU: {cfg["iou_threshold"]}, Confidence: {cfg["confidence_threshold"]}')
+    print('[INFO] Load model...')
+    model = load_model(model_path, cfg['num_classes'], device) # eval mode
+    print('[INFO] Model loaded successfully')
+    print(f'[INFO] Processing video: {cfg["input_video_path"]}')
+    print(f'[INFO] Thresholds: Score: {cfg["score_threshold"]}, IoU: {cfg["iou_threshold"]}, Confidence: {cfg["confidence_threshold"]}')
     detect_video(model, cfg['input_video_path'], output_video_path, device, cfg['score_threshold'], cfg['iou_threshold'], cfg['confidence_threshold'], cfg['warning_distance'])
+
+if __name__ == "__main__":
+    args = default_argument_parser()
+    print("Command Line Args:", args)
+    main(args) 
+    
+
+    

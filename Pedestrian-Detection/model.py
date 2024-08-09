@@ -1,11 +1,4 @@
-import torchvision
-from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-from torchvision.models.detection.anchor_utils import AnchorGenerator
-import torchvision
-from torchvision.models.detection.retinanet import RetinaNet
-from torchvision.models.detection.retinanet import RetinaNetHead, retinanet_resnet50_fpn
-from torchvision.models.detection.anchor_utils import AnchorGenerator
-from torchvision.models.detection.retinanet import RetinaNetHead, RetinaNetClassificationHead
+from torchvision.models.detection.retinanet import retinanet_resnet50_fpn, RetinaNetClassificationHead
 import torch 
 
 def build_model(num_classes):

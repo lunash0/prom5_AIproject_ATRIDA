@@ -1,7 +1,7 @@
-import os
-import json
 import xml.etree.ElementTree as ET
-from tqdm import tqdm 
+import json
+import os
+from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 
 def parse_xml_for_person(xml_file):
@@ -10,9 +10,9 @@ def parse_xml_for_person(xml_file):
 
     images = []
     annotations = []
+    image_id_mapping = {}
     annotation_id = 0
 
-    # Iterate over all images
     for image in root.findall('image'):
         image_id = int(image.get('id'))
         file_name = image.get('name')
@@ -25,8 +25,8 @@ def parse_xml_for_person(xml_file):
             "width": width,
             "height": height
         })
+        image_id_mapping[image_id] = len(images) - 1  # Map the original image ID to its index
 
-        # Iterate over all boxes in the image
         for box in image.findall('box'):
             label = box.get('label')
 
@@ -46,7 +46,7 @@ def parse_xml_for_person(xml_file):
 
                 annotations.append({
                     "id": annotation_id,
-                    "image_id": image_id,
+                    "image_id": image_id,  # Use the original image ID
                     "category_id": category_id,
                     "bbox": [xtl, ytl, bbox_width, bbox_height],
                     "area": bbox_width * bbox_height,
@@ -69,6 +69,9 @@ def process_and_save(xml_files, output_file_path):
     for xml_file_path in tqdm(xml_files):
         images, annotations = parse_xml_for_person(xml_file_path)
 
+        # Map the image ID in the current XML file to a new ID
+        current_image_id_map = {img['id']: image_id_counter + i for i, img in enumerate(images)}
+        
         for img in images:
             img['id'] = image_id_counter
             cumulative_images.append(img)
@@ -76,11 +79,9 @@ def process_and_save(xml_files, output_file_path):
 
         for ann in annotations:
             ann['id'] = annotation_id_counter
-            ann['image_id'] = ann['image_id'] + image_id_counter - len(images)  # Adjusting image_id
+            ann['image_id'] = current_image_id_map.get(ann['image_id'], ann['image_id'])  # Remap image ID
             cumulative_annotations.append(ann)
             annotation_id_counter += 1
-
-    #    print(f'Processed {xml_file_path}')
 
     coco_format_data = {
         "images": cumulative_images,
@@ -93,26 +94,22 @@ def process_and_save(xml_files, output_file_path):
 
     print(f'Combined annotations saved to {output_file_path}')
 
-
-
-
 def main():
     dataset_base_folder = '/data/tmp/data'
     xml_files = []
-    for subdir, _, files in (os.walk(dataset_base_folder)):
+    for subdir, _, files in os.walk(dataset_base_folder):
         for file in files:
             if file.endswith('.xml'):
                 xml_file_path = os.path.join(subdir, file)
                 xml_files.append(xml_file_path)
-    
-    train_files, val_files = train_test_split(xml_files, test_size=0.2, random_state=42)
+    xml_files = sorted(xml_files)
+    train_files, val_files = train_test_split(xml_files, test_size=0.3, random_state=42)
 
-    train_output_path = '/home/yoojinoh/Others/PR/PedDetect-Data/aihub/train_annotations.json' 
+    train_output_path = '/data/tmp/train_annotations.json'
     process_and_save(train_files, train_output_path)
 
-    val_output_path = '/home/yoojinoh/Others/PR/PedDetect-Data/aihub/val_annotations.json'
+    val_output_path = '/data/tmp/val_annotations.json'
     process_and_save(val_files, val_output_path)
-
 
 if __name__ == "__main__":
     main()

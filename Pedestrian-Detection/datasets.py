@@ -1,40 +1,15 @@
-import warnings
-warnings.filterwarnings(action='ignore')
 import numpy as np
-import pandas as pd 
-import matplotlib.pyplot as plt
-from PIL import Image 
-from collections import defaultdict
 import cv2
-import random
-import glob
 import os
-import re 
 import json
 import torch 
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
-
-import torchvision
-import torchvision.models as models
-from torchvision.models.detection.faster_rcnn import FastRCNNPredictor, FasterRCNN
-from torchvision.models.detection.rpn import AnchorGenerator
-from torchvision.models.detection.backbone_utils import resnet_fpn_backbone
-from torchvision.transforms import ToTensor, transforms
 from torch.utils.data import DataLoader, Dataset
-from tqdm.auto import tqdm
-
-from custom_utils import collate_fn, train_transform, valid_transform, normalize_bbox, load_yaml
-import os
-import json
-import cv2
-import numpy as np
-import torch
-from torch.utils.data import Dataset
+from utils import collate_fn, train_transform, valid_transform, normalize_bbox, load_yaml
 from collections import defaultdict
 from tqdm import tqdm 
+import warnings
+warnings.filterwarnings(action='ignore')
 
 class PedestrianDataset(Dataset):
     def __init__(self, root: str, train: bool, split: str = "train", transforms=None, image_size=[640, 360]):
@@ -45,7 +20,7 @@ class PedestrianDataset(Dataset):
         self.transforms = transforms
         self.image_size = image_size 
         
-        annot_path = os.path.join(root, f'{split.lower()}_annotations.json') # TODO: Hard Coded
+        annot_path = os.path.join(root, f'{split.lower()}_annotations.json') 
 
         with open(annot_path) as f:
             raw_annots = json.load(f)["annotations"]
@@ -108,14 +83,14 @@ class PedestrianDataset(Dataset):
         image_filename = os.path.basename(image_path)
         anns = self.local_annotations[self.images_info_dict[image_filename]]
 
-        image = cv2.imread(image_path) # 1080x1920x3=hxwxc
+        image = cv2.imread(image_path) 
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(np.float32)
 
         WIDTH, HEIGHT = self.image_size[0], self.image_size[1]
-        image_resized = cv2.resize(image, (WIDTH, HEIGHT))  # Resize images to (360, 640, 3)
+        image_resized = cv2.resize(image, (WIDTH, HEIGHT)) 
 
         image_resized /= 255.0
-        image_resized = image_resized.copy()  # <=0.5
+        image_resized = image_resized.copy() 
 
         width, height = image.shape[1], image.shape[0] # original shape of image
 
@@ -157,12 +132,8 @@ class PedestrianDataset(Dataset):
         if self.train:
             if self.transforms is not None:
                 transformed = self.transforms(image=image_resized, bboxes=boxes, labels=labels)
-                _image = transformed['image'] # 3x360x640
+                _image = transformed['image'] 
                 _bboxes = transformed['bboxes']
-                
-                 
-                """ # Sanity Check
-                check = visualize_image(_image) #CHECK (Yoojin) """
 
                 valid_boxes = []
                 for box in _bboxes:
@@ -177,7 +148,7 @@ class PedestrianDataset(Dataset):
         else:
             if self.transforms is not None:
                 transformed = self.transforms(image=image_resized, bboxes=boxes, labels=labels)
-                _image = transformed['image'] # 3x360x640
+                _image = transformed['image'] 
                 _bboxes = transformed['bboxes']
 
                 valid_boxes = []
@@ -190,12 +161,12 @@ class PedestrianDataset(Dataset):
 
             return image, target, width, height, image_filename        
 
-def create_train_dataset():
-    train_dataset = PedestrianDataset(root='/data/tmp/', train=True, split="train", transforms=train_transform())
+def create_train_dataset(cfg_dir):
+    train_dataset = PedestrianDataset(root='/data/tmp/', train=True, split="train", transforms=train_transform(cfg_dir))
     return train_dataset
 
-def create_valid_dataset():
-    val_dataset = PedestrianDataset(root='/data/tmp/', train= False, split="val", transforms=valid_transform())
+def create_valid_dataset(cfg_dir):
+    val_dataset = PedestrianDataset(root='/data/tmp/', train= False, split="val", transforms=valid_transform(cfg_dir))
     return val_dataset
 
 def create_train_loader(train_dataset, batch_size):
